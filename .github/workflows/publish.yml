@@ -59,13 +59,25 @@ jobs:
         run: npm run build
       - name: Test
         run: npm test
+      - name: Skip if this version is already on npm (idempotent re-tag)
+        id: published
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "mcp-tenant-context@${VERSION}" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "mcp-tenant-context@${VERSION} is already published — skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Attest build provenance
+        if: steps.published.outputs.exists == 'false'
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             dist/**/*.js
             dist/**/*.d.ts
       - name: Publish to npm (Trusted Publishing OIDC, --provenance)
+        if: steps.published.outputs.exists == 'false'
         # No NPM_TOKEN is set. `--provenance` produces an npm-side provenance
         # statement that is cross-verified by the trusted-publisher policy.
         run: npm publish --provenance --access public
