@@ -43,11 +43,11 @@ jobs:
         run: |
           echo "${{ inputs.tag }}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             || { echo "ERROR: inputs.tag must be a semver tag (e.g. v0.1.0)"; exit 1; }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22.x
           cache: npm
@@ -71,7 +71,7 @@ jobs:
           fi
       - name: Attest build provenance
         if: steps.published.outputs.exists == 'false'
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/**/*.js
