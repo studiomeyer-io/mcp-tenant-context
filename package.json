@@ -53,8 +53,7 @@
     "url": "https://github.com/studiomeyer-io/mcp-tenant-context/issues"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
