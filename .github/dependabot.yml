@@ -1,0 +1,46 @@
+version: 2
+# Conservative policy:
+# - Weekly Monday 06:00 CET, max 5 open PRs
+# - Patches + minors auto-grouped into one PR
+# - Major bumps IGNORED for routine updates (require manual review)
+# - Security advisories still auto-applied (security fixes bypass `ignore`)
+# - GitHub Actions monthly, all bumps grouped (Action versions usually safe)
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    labels:
+      - "dependencies"
+    groups:
+      patch-and-minor:
+        update-types:
+          - "patch"
+          - "minor"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "ci"
+    groups:
+      actions:
+        patterns:
+          - "*"

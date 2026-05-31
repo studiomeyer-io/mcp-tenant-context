@@ -1,0 +1,65 @@
+{
+  "name": "mcp-tenant-context",
+  "version": "0.1.0",
+  "description": "AsyncLocalStorage-backed tenant + actor context propagation for MCP servers and request-scoped Node services. Keep tenantSlug and the request actor out of every handler signature. Zero runtime dependencies.",
+  "license": "MIT",
+  "author": "Matthias Meyer (StudioMeyer)",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "SECURITY.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "tenant",
+    "multi-tenant",
+    "tenant-context",
+    "async-local-storage",
+    "async-hooks",
+    "context-propagation",
+    "request-context",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/studiomeyer-io/mcp-tenant-context.git"
+  },
+  "homepage": "https://github.com/studiomeyer-io/mcp-tenant-context#readme",
+  "bugs": {
+    "url": "https://github.com/studiomeyer-io/mcp-tenant-context/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^4.1.7",
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.7"
+  }
+}

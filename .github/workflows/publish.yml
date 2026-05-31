@@ -1,0 +1,71 @@
+name: Publish
+
+# npm Trusted Publishing (OIDC) + Sigstore build attestations for the
+# mcp-tenant-context package. Fires on tag push (semver vX.Y.Z); also exposed
+# as workflow_dispatch so a release can be re-triggered without re-tagging.
+#
+# Trusted Publishing setup (one-time, npm registry side):
+#   1. Owner enables the "Trusted Publisher" policy on the mcp-tenant-context
+#      package at npmjs.com.
+#   2. Owner adds this repo (studiomeyer-io/mcp-tenant-context) + this workflow
+#      file path (.github/workflows/publish.yml) + the `release` environment
+#      as the trusted publisher.
+# After that, `npm publish --provenance` succeeds without an NPM_TOKEN secret:
+# the OIDC token minted by `permissions: id-token: write` carries the GitHub
+# Actions identity that npm verifies against the trusted-publisher policy.
+#
+# Build attestation (Sigstore): `actions/attest-build-provenance` records a
+# signed in-toto SLSA attestation of the dist/ artefacts in the repo's
+# transparency log. Consumers can verify with `gh attestation verify`.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish (e.g. v0.1.0)"
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write       # required for OIDC trusted publishing + provenance
+      attestations: write   # required for actions/attest-build-provenance
+    steps:
+      - name: Validate tag format (manual dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "${{ inputs.tag }}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            || { echo "ERROR: inputs.tag must be a semver tag (e.g. v0.1.0)"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: Type-check
+        run: npm run typecheck
+      - name: Build dist/
+        run: npm run build
+      - name: Test
+        run: npm test
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/**/*.js
+            dist/**/*.d.ts
+      - name: Publish to npm (Trusted Publishing OIDC, --provenance)
+        # No NPM_TOKEN is set. `--provenance` produces an npm-side provenance
+        # statement that is cross-verified by the trusted-publisher policy.
+        run: npm publish --provenance --access public
