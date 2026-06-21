@@ -7,11 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Roadmap (v0.2)
+### Roadmap
 
-- `bindTenantContext()` / snapshot helper to carry the context across detached
-  callbacks and `EventEmitter` listeners (see README "Context loss").
 - A small published benchmark of the `AsyncLocalStorage` overhead.
+
+## [0.2.0] - 2026-06-21
+
+### Added
+
+- `bindTenantContext(fn)` — snapshot helper that binds a callback to the tenant
+  context active at call time, so a listener registered on an `EventEmitter` or
+  stream (`stream.on("data", ...)`, `req.on("close", ...)`) still observes the
+  context when invoked later, outside the original async scope. Built on Node's
+  `AsyncLocalStorage.bind`; preserves the wrapped function's exact parameter and
+  return types via a generic (no `any`). This was the v0.2 roadmap item replacing
+  the manual `AsyncResource.bind` recipe previously shown in the README.
+- Async-context-correctness test suite (`tests/async-boundaries.test.ts`, 20
+  tests) pinning context behaviour across `await` chains, `queueMicrotask`,
+  `process.nextTick`, `setImmediate`, `setTimeout` (reject path), `setInterval`,
+  `Promise.all` / `Promise.race` / `Promise.allSettled`, nested + concurrent
+  `runWithTenantContext`, and the *correct absence* of context inside detached
+  `EventEmitter` / stream listeners — plus recovery of all of these via
+  `bindTenantContext`.
+
+### Changed
+
+- Test suite grows from 27 to 47 tests across 4 files; coverage stays at the
+  enforced 100% (statements / branches / functions / lines).
+
+### Security
+
+- Dev-dependency lockfile refreshed to pull in the patched `vite` (via
+  `vitest` 4.1.9), clearing the high-severity advisories
+  [GHSA-fx2h-pf6j-xcff](https://github.com/advisories/GHSA-fx2h-pf6j-xcff) and
+  [GHSA-v6wh-96g9-6wx3](https://github.com/advisories/GHSA-v6wh-96g9-6wx3).
+  Dev-only and Windows-specific; no effect on the published runtime (which has
+  zero dependencies). `package.json` ranges were unchanged — the caret ranges
+  already permitted the fixed versions.
+
+### Compatibility
+
+- Non-breaking: every 0.1.0 export keeps its signature. `bindTenantContext` is
+  purely additive.
 
 ## [0.1.0] - 2026-05-31
 

@@ -13,6 +13,9 @@
  *     guarantees this via async_hooks).
  *   - Sibling concurrent calls: parallel `Promise.all([runWithTenantContext(a), runWithTenantContext(b)])`
  *     do not bleed into each other.
+ *   - bindTenantContext: snapshots the current context so a listener registered
+ *     on an EventEmitter / stream still observes it when invoked later, outside
+ *     the original async scope.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -23,6 +26,13 @@ import {
 } from "./types.js";
 
 const storage = new AsyncLocalStorage<TenantContext>();
+
+/**
+ * Any callable. Used as the type constraint for {@link bindTenantContext} so
+ * the exact parameter and return types of the bound function are preserved
+ * end-to-end without resorting to `any`.
+ */
+type AnyFunction = (...args: never[]) => unknown;
 
 /**
  * Run `fn` with `ctx` installed as the current tenant context. Every
@@ -71,6 +81,45 @@ export function getTenantContext(): TenantContext {
  */
 export function getTenantContextOrUndefined(): TenantContext | undefined {
   return storage.getStore();
+}
+
+/**
+ * Bind `fn` to the tenant context that is active *right now*, returning a new
+ * function with the identical signature. However the bound function is later
+ * invoked — synchronously, from a timer, or from an `EventEmitter` / stream
+ * listener registered outside any tenant scope — it runs with the captured
+ * context restored, so `getTenantContext()` inside it resolves instead of
+ * throwing.
+ *
+ * This closes the one gap `AsyncLocalStorage` does not cover automatically: a
+ * callback attached in a *different* async context (the classic
+ * `stream.on("data", ...)` / `req.on("close", ...)` case — see the README
+ * "Context loss across callbacks and event emitters"). Capture the context at
+ * registration time:
+ *
+ * @example
+ * runWithTenantContext(ctx, () => {
+ *   // Registered now → bound to `ctx`, even though `emit` happens later.
+ *   stream.on("data", bindTenantContext((chunk: Buffer) => {
+ *     const { tenantSlug } = getTenantContext(); // resolves to ctx
+ *     audit(tenantSlug, chunk.length);
+ *   }));
+ * });
+ *
+ * Arguments passed to the bound function are forwarded unchanged, and the
+ * return value is passed through. If there is no active context when
+ * `bindTenantContext` is called, the snapshot is simply empty — invoking the
+ * bound function then behaves exactly as if it were never bound (i.e.
+ * `getTenantContext()` throws), which is the same behaviour as not binding at
+ * all.
+ *
+ * Note: this binds the *whole* async context (all `AsyncLocalStorage`
+ * instances), not only this library's store — that is how Node's primitive
+ * works and is what you want, since a single callback usually needs every
+ * ambient context (tenant, trace, logger) restored together.
+ */
+export function bindTenantContext<F extends AnyFunction>(fn: F): F {
+  return AsyncLocalStorage.bind(fn);
 }
 
 /**

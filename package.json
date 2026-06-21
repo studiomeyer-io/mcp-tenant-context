@@ -1,6 +1,6 @@
 {
   "name": "mcp-tenant-context",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AsyncLocalStorage-backed tenant + actor context propagation for MCP servers and request-scoped Node services. Keep tenantSlug and the request actor out of every handler signature. Zero runtime dependencies.",
   "license": "MIT",
   "author": "Matthias Meyer (StudioMeyer)",
