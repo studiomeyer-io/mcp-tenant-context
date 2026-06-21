@@ -99,6 +99,7 @@ async function listPages(args: { limit: number }) {
 | `runWithTenantContext<T>(ctx, fn)` | Run `fn` with `ctx` installed. Preserves sync/async return type. |
 | `getTenantContext()` | Current ctx, or throws `NoTenantContextError`. |
 | `getTenantContextOrUndefined()` | Current ctx, or `undefined`. |
+| `bindTenantContext<F>(fn)` | Snapshot the active ctx onto `fn` so detached `EventEmitter`/stream callbacks keep it. Same signature in, same out. |
 | `withTenantContextHandler<TArgs, TResult>(handler)` | Middleware that extracts ctx and passes it as the first arg. |
 | `oauthActor(email)` | OAuth-backed actor. Display name derived from the email local part. |
 | `apiKeyActor(tenantSlug)` | Synthetic `service-account@<slug>.invalid` actor (RFC 2606 reserved TLD). |
@@ -150,29 +151,39 @@ scopes. Everything above the context is yours.
 
 ## Context loss across callbacks and event emitters
 
-`AsyncLocalStorage` follows `async`/`await`, promises, `setTimeout` and
-`queueMicrotask` automatically (all covered by the test suite). It does **not**
-follow a callback registered in a *different* async context — the classic case
-is an `EventEmitter` listener (`stream.on("data", ...)`, `req.on("close", ...)`)
-attached outside the tenant scope. Inside such a callback `getTenantContext()`
-throws.
+`AsyncLocalStorage` follows `async`/`await`, promises, `setTimeout`,
+`setInterval`, `setImmediate`, `process.nextTick`, `queueMicrotask` and the
+`Promise.all` / `race` / `allSettled` combinators automatically (all covered by
+the test suite). It does **not** follow a callback registered in a *different*
+async context — the classic case is an `EventEmitter` listener
+(`stream.on("data", ...)`, `req.on("close", ...)`) attached outside the tenant
+scope. Inside such a callback `getTenantContext()` throws.
 
-If you need the context inside a detached callback, capture a snapshot at
-registration time with the Node stdlib:
+For that case, bind the callback to the current context at registration time
+with `bindTenantContext`:
 
 ```typescript
-import { AsyncResource } from "node:async_hooks";
+import { runWithTenantContext, bindTenantContext, getTenantContext } from "mcp-tenant-context";
 
-req.on("close", AsyncResource.bind(() => {
-  const ctx = getTenantContext(); // resolves to the captured scope
-}));
+runWithTenantContext(ctx, () => {
+  // Captured now → still resolves when `data` fires later, outside the scope.
+  stream.on("data", bindTenantContext((chunk: Buffer) => {
+    const { tenantSlug } = getTenantContext(); // resolves to ctx
+    audit(tenantSlug, chunk.length);
+  }));
+});
 ```
 
-A first-class `bindTenantContext()` snapshot helper is on the v0.2 roadmap.
+`bindTenantContext(fn)` returns a function with the **same signature** as `fn`
+(arguments and return value pass through unchanged) and snapshots the whole
+ambient async context, so tenant, trace and any other `AsyncLocalStorage` are
+restored together. It is built on Node's `AsyncLocalStorage.bind`. If there is
+no active context when you bind, the bound function behaves exactly like the
+unbound one (so `getTenantContext()` still throws) — binding is never harmful.
 
-The context also does **not** propagate into `worker_threads` — a spawned worker
-starts with an empty store by design. Pass `tenantSlug` explicitly across the
-worker boundary.
+The context still does **not** propagate into `worker_threads` — a spawned
+worker starts with an empty store by design. Pass `tenantSlug` explicitly across
+the worker boundary.
 
 ## Performance
 
@@ -192,10 +203,18 @@ when several of your dependencies use it.
 
 ## Edge cases covered by the test suite
 
-- Nested `runWithTenantContext` — inner overrides, outer is restored on resume.
+- Nested `runWithTenantContext` — inner overrides, outer is restored on resume,
+  including after an `await` and across concurrent child scopes.
 - Sibling concurrent runs — no bleed between parallel contexts.
 - Async-iterator passthrough — ctx survives `for await` boundaries.
-- Detached `setTimeout` callbacks — ctx propagates through the timer.
+- Every timer + microtask boundary — `setTimeout` (resolve *and* reject path),
+  `setInterval`, `setImmediate`, `process.nextTick`, `queueMicrotask`.
+- Promise combinators — `Promise.all`, `Promise.race`, `Promise.allSettled`
+  keep ctx in each branch and after the join.
+- Detached `EventEmitter` / stream listeners — ctx is *correctly absent* (the
+  one boundary `AsyncLocalStorage` cannot follow), and `getTenantContext()`
+  throws there; `bindTenantContext` restores it, even after `run()` has exited
+  and even when emitted from inside a different live context.
 - Synchronous-vs-async `fn` return type — preserved.
 - Optional `traceId` + `sessionId` fields.
 - `oauthActor` with pathological input: empty local part (`@host`), no `@` at
@@ -203,13 +222,13 @@ when several of your dependencies use it.
   is capped, the email is preserved verbatim) — each returns a safe,
   non-throwing value.
 
-27 tests across 3 files.
+47 tests across 4 files.
 
 ## Versioning
 
 Strict [SemVer](https://semver.org/). No breaking change without a major bump
 and a migration note in [`CHANGELOG.md`](./CHANGELOG.md). Pin with a caret
-(`"mcp-tenant-context": "^0.1.0"`).
+(`"mcp-tenant-context": "^0.2.0"`).
 
 ## Related
 

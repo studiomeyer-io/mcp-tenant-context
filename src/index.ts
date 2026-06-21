@@ -12,6 +12,7 @@ export {
   runWithTenantContext,
   getTenantContext,
   getTenantContextOrUndefined,
+  bindTenantContext,
   oauthActor,
   apiKeyActor,
   anonymousActor,
